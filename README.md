@@ -20,6 +20,12 @@ End-of-day recap for AI-assisted coding sessions. Reads your local conversations
 ## Install
 
 ```bash
+npm install -g devday
+```
+
+## Development
+
+```bash
 git clone https://github.com/ujjwaljainnn/devday.git
 cd devday
 npm install
