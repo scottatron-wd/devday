@@ -104,8 +104,7 @@ export class OpenCodeParser implements Parser {
     const sessions: Session[] = [];
 
     for (const project of projects) {
-      // Skip the "global" project (worktree = "/")
-      if (project.worktree === '/') continue;
+      const isGlobal = project.worktree === '/';
 
       // 2. Load sessions for this project
       const ocSessions = this.loadSessionsForProject(project.id);
@@ -124,6 +123,10 @@ export class OpenCodeParser implements Parser {
 
         // Skip sub-agent sessions (they have a parentID, their data is attributed to the parent)
         if (ocSession.parentID) continue;
+
+        // For global project sessions, use the session's directory as the project path.
+        // Skip if the directory is also "/" or missing (truly global, no project context).
+        if (isGlobal && (!ocSession.directory || ocSession.directory === '/')) continue;
 
         // 3. Load messages for this session (including sub-agent sessions)
         const childSessionIds = ocSessions
@@ -195,11 +198,13 @@ export class OpenCodeParser implements Parser {
         const topics: string[] = [];
         if (ocSession.title) topics.push(ocSession.title);
 
+        const sessionProjectPath = isGlobal ? ocSession.directory : project.worktree;
+
         sessions.push({
           id: ocSession.id,
           tool: 'opencode',
-          projectPath: project.worktree,
-          projectName: basename(project.worktree),
+          projectPath: sessionProjectPath,
+          projectName: basename(sessionProjectPath),
           title: ocSession.title ?? ocSession.slug ?? null,
           startedAt: new Date(earliest),
           endedAt: new Date(latest),

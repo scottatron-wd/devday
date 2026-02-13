@@ -1,7 +1,7 @@
 {
   "name": "devday",
   "version": "0.1.0",
-  "description": "End-of-day recap for AI-assisted coding sessions. Reads OpenCode conversations, cross-references with git, and generates standup-ready summaries.",
+  "description": "End-of-day recap for AI-assisted coding sessions. Reads OpenCode, Claude Code, and Cursor conversations, cross-references with git, and generates standup-ready summaries.",
   "type": "module",
   "bin": {
     "devday": "./bin/devday.js"
@@ -17,7 +17,12 @@
   "scripts": {
     "build": "tsc",
     "dev": "tsx src/index.ts",
-    "start": "node dist/index.js"
+    "start": "node dist/index.js",
+    "prepublishOnly": "npm run build"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/ujjwaljainnn/devday.git"
   },
   "keywords": [
     "cli",
@@ -26,6 +31,8 @@
     "recap",
     "standup",
     "opencode",
+    "claude-code",
+    "cursor",
     "developer-tools"
   ],
   "author": "Ujjwal Jain",
