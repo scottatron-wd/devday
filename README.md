@@ -2,6 +2,8 @@
 
 End-of-day recap for AI-assisted coding sessions. Reads your local conversations from OpenCode, Claude Code, and Cursor, cross-references with git, and generates standup-ready summaries.
 
+![devday output](screenshot.png)
+
 ## What it does
 
 - Scans completed AI coding sessions from your local machine (nothing leaves your machine unless you enable LLM summaries)
