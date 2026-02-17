@@ -19,6 +19,7 @@ function getDefaultPaths() {
         ? join(home, 'AppData', 'Roaming', 'Cursor', 'User', 'globalStorage', 'state.vscdb')
         : join(home, '.config', 'Cursor', 'User', 'globalStorage', 'state.vscdb'),
     codexSessions: join(home, '.codex', 'sessions'),
+    copilotSessionState: join(home, '.copilot', 'session-state'),
   };
 }
 
@@ -30,6 +31,7 @@ function detectAvailableTools(): ToolName[] {
   if (existsSync(paths.claudeCodeHome)) tools.push('claude-code');
   if (existsSync(paths.cursorStateDb)) tools.push('cursor');
   if (existsSync(paths.codexSessions)) tools.push('codex');
+  if (existsSync(paths.copilotSessionState)) tools.push('copilot');
 
   return tools;
 }
@@ -59,6 +61,7 @@ export function loadConfig(): DevDayConfig {
       claudeCodeHome: existsSync(paths.claudeCodeHome) ? paths.claudeCodeHome : null,
       cursorStateDb: existsSync(paths.cursorStateDb) ? paths.cursorStateDb : null,
       codexSessions: existsSync(paths.codexSessions) ? paths.codexSessions : null,
+      copilotSessionState: existsSync(paths.copilotSessionState) ? paths.copilotSessionState : null,
     },
     enabledTools: detectAvailableTools(),
     gitAuthorFilter: null,

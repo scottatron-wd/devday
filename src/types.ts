@@ -1,5 +1,5 @@
 // ── Tool identifiers ──────────────────────────────────────────────
-export type ToolName = 'opencode' | 'claude-code' | 'cursor' | 'codex';
+export type ToolName = 'opencode' | 'claude-code' | 'cursor' | 'codex' | 'copilot';
 
 // ── Unified session representation ───────────────────────────────
 export interface Session {
@@ -117,6 +117,7 @@ export interface DevDayConfig {
     claudeCodeHome: string | null;    // ~/.claude
     cursorStateDb: string | null;     // ~/Library/Application Support/Cursor/...
     codexSessions: string | null;     // ~/.codex/sessions
+    copilotSessionState: string | null; // ~/.copilot/session-state
   };
 
   // Which tools to scan

@@ -8,6 +8,7 @@ import { OpenCodeParser } from './parsers/opencode.js';
 import { ClaudeCodeParser } from './parsers/claude-code.js';
 import { CursorParser } from './parsers/cursor.js';
 import { CodexParser } from './parsers/codex.js';
+import { CopilotParser } from './parsers/copilot.js';
 import { getGitActivity } from './git.js';
 import { buildDayRecap } from './merge.js';
 import { summarizeRecap } from './summarize.js';
@@ -67,6 +68,7 @@ Supported tools:
   claude code                 ~/.claude/
   cursor                      ~/Library/.../state.vscdb
   codex                       ~/.codex/sessions/
+  copilot                     ~/.copilot/session-state/
 `)
   .action(async (opts) => {
     verbose = opts.verbose ?? false;
@@ -111,6 +113,11 @@ Supported tools:
       if (config.enabledTools.includes('codex') && config.paths.codexSessions) {
         parsers.push(new CodexParser(config.paths.codexSessions));
         debug(`codex sessions: ${config.paths.codexSessions}`);
+      }
+
+      if (config.enabledTools.includes('copilot') && config.paths.copilotSessionState) {
+        parsers.push(new CopilotParser(config.paths.copilotSessionState));
+        debug(`copilot session state: ${config.paths.copilotSessionState}`);
       }
 
       if (parsers.length === 0) {
@@ -232,6 +239,7 @@ function printBanner(
   if (config.paths.claudeCodeHome) tools.push(chalk.green('claude code'));
   if (config.paths.cursorStateDb) tools.push(chalk.green('cursor'));
   if (config.paths.codexSessions) tools.push(chalk.green('codex'));
+  if (config.paths.copilotSessionState) tools.push(chalk.green('copilot'));
   if (tools.length > 0) {
     console.log(chalk.dim('  Tools: ') + tools.join(', '));
   } else {
@@ -260,6 +268,7 @@ function printNoToolsMessage(): void {
     console.log(`    ${chalk.cyan('claude code')}    ${chalk.dim(home + '/.claude/')}`);
     console.log(`    ${chalk.cyan('cursor')}          ${chalk.dim('~/Library/.../state.vscdb')}`);
     console.log(`    ${chalk.cyan('codex')}           ${chalk.dim(home + '/.codex/sessions/')}`);
+    console.log(`    ${chalk.cyan('copilot')}         ${chalk.dim(home + '/.copilot/session-state/')}`);
   console.log('');
   console.log('  Install a supported tool and start a coding session,');
   console.log('  then run ' + chalk.cyan('devday') + ' again.');
