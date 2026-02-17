@@ -7,6 +7,7 @@ import { loadConfig } from './config.js';
 import { OpenCodeParser } from './parsers/opencode.js';
 import { ClaudeCodeParser } from './parsers/claude-code.js';
 import { CursorParser } from './parsers/cursor.js';
+import { CodexParser } from './parsers/codex.js';
 import { getGitActivity } from './git.js';
 import { buildDayRecap } from './merge.js';
 import { summarizeRecap } from './summarize.js';
@@ -65,6 +66,7 @@ Supported tools:
   opencode                    ~/.local/share/opencode/storage/
   claude code                 ~/.claude/
   cursor                      ~/Library/.../state.vscdb
+  codex                       ~/.codex/sessions/
 `)
   .action(async (opts) => {
     verbose = opts.verbose ?? false;
@@ -104,6 +106,11 @@ Supported tools:
       if (config.enabledTools.includes('cursor') && config.paths.cursorStateDb) {
         parsers.push(new CursorParser(config.paths.cursorStateDb));
         debug(`cursor db: ${config.paths.cursorStateDb}`);
+      }
+
+      if (config.enabledTools.includes('codex') && config.paths.codexSessions) {
+        parsers.push(new CodexParser(config.paths.codexSessions));
+        debug(`codex sessions: ${config.paths.codexSessions}`);
       }
 
       if (parsers.length === 0) {
@@ -224,6 +231,7 @@ function printBanner(
   if (config.paths.opencodeStorage) tools.push(chalk.green('opencode'));
   if (config.paths.claudeCodeHome) tools.push(chalk.green('claude code'));
   if (config.paths.cursorStateDb) tools.push(chalk.green('cursor'));
+  if (config.paths.codexSessions) tools.push(chalk.green('codex'));
   if (tools.length > 0) {
     console.log(chalk.dim('  Tools: ') + tools.join(', '));
   } else {
@@ -251,6 +259,7 @@ function printNoToolsMessage(): void {
   console.log(`    ${chalk.cyan('opencode')}      ${chalk.dim(home + '/.local/share/opencode/storage/')}`);
     console.log(`    ${chalk.cyan('claude code')}    ${chalk.dim(home + '/.claude/')}`);
     console.log(`    ${chalk.cyan('cursor')}          ${chalk.dim('~/Library/.../state.vscdb')}`);
+    console.log(`    ${chalk.cyan('codex')}           ${chalk.dim(home + '/.codex/sessions/')}`);
   console.log('');
   console.log('  Install a supported tool and start a coding session,');
   console.log('  then run ' + chalk.cyan('devday') + ' again.');

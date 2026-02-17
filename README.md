@@ -18,7 +18,7 @@ End-of-day recap for AI-assisted coding sessions. Reads your local conversations
 | OpenCode | `~/.local/share/opencode/storage/` |
 | Claude Code | `~/.claude/` (SQLite + JSONL) |
 | Cursor | `~/Library/Application Support/Cursor/User/globalStorage/state.vscdb` |
-| Codex | WIP |
+| Codex | `~/.codex/sessions/` (JSONL) |
 | Gemini CLI | WIP |
 
 ## Install
