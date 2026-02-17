@@ -1,7 +1,7 @@
 import { Command } from 'commander';
 import ora from 'ora';
 import chalk from 'chalk';
-import { format, subDays } from 'date-fns';
+import { format, isValid, parseISO, subDays } from 'date-fns';
 import { homedir } from 'node:os';
 import { loadConfig } from './config.js';
 import { OpenCodeParser } from './parsers/opencode.js';
@@ -28,6 +28,12 @@ function resolveDate(input: string | undefined): string {
   if (lower === 'today') return format(new Date(), 'yyyy-MM-dd');
   if (lower === 'yesterday') return format(subDays(new Date(), 1), 'yyyy-MM-dd');
   return input;
+}
+
+function isValidDateString(value: string): boolean {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) return false;
+  const parsed = parseISO(value);
+  return isValid(parsed) && format(parsed, 'yyyy-MM-dd') === value;
 }
 
 const program = new Command();
@@ -66,7 +72,7 @@ Supported tools:
     const config = loadConfig();
 
     // Validate date format
-    if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) {
+    if (!isValidDateString(date)) {
       console.error(chalk.red(`Invalid date format: "${opts.date}". Use YYYY-MM-DD, "today", or "yesterday".`));
       process.exit(1);
     }
