@@ -10,6 +10,7 @@ End-of-day recap for AI-assisted coding sessions. Reads your local conversations
 - Shows tokens used, estimated cost, duration, and models per session
 - Groups sessions by project and shows git commits alongside
 - Optionally generates first-person standup messages via OpenAI or Anthropic
+- Can generate a detailed markdown worklog and write it directly to an Obsidian inbox note
 
 ## Supported tools
 
@@ -46,9 +47,32 @@ devday -d yesterday           # yesterday
 devday -d 2026-02-11          # specific date
 devday --standup              # short standup format
 devday --json                 # machine-readable output
+devday --worklog              # detailed markdown worklog
+devday --worklog --write-obsidian-inbox
 devday --no-git               # skip git integration
 devday --no-summarize         # skip LLM summaries
 devday -v                     # debug output
+```
+
+## Obsidian worklog output
+
+Generate a detailed worklog with session IDs:
+
+```bash
+devday --worklog
+```
+
+Write that worklog into your vault inbox:
+
+```bash
+devday --worklog --write-obsidian-inbox
+```
+
+By default this writes to `~/obsidian-notebook/inbox/`.
+Override the vault path if needed:
+
+```bash
+devday --worklog --write-obsidian-inbox --obsidian-vault ~/my-vault
 ```
 
 ## AI summaries
