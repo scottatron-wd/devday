@@ -277,9 +277,29 @@ export class CursorParser implements Parser {
 
     // ── Cost estimation ───────────────────────────────────────
     let totalCost = 0;
-    if (totalTokens.total > 0 && models.size > 0) {
-      const mappedModel = mapCursorModel([...models][0]);
-      totalCost = estimateCost(mappedModel, totalTokens);
+    for (const b of aiBubbles) {
+      if (!b.tokenCount) continue;
+
+      const rawModel = b.modelInfo?.modelName ?? composer.modelConfig?.modelName;
+      if (!rawModel) continue;
+
+      const usage = {
+        input: b.tokenCount.inputTokens ?? 0,
+        output: b.tokenCount.outputTokens ?? 0,
+        reasoning: 0,
+        cacheRead: 0,
+        cacheWrite: 0,
+        total: (b.tokenCount.inputTokens ?? 0) + (b.tokenCount.outputTokens ?? 0),
+      };
+
+      if (usage.total > 0) {
+        totalCost += estimateCost(mapCursorModel(rawModel), usage);
+      }
+    }
+
+    // Fallback for older rows where we can only infer aggregate tokens + one model.
+    if (totalCost === 0 && totalTokens.total > 0 && models.size > 0) {
+      totalCost = estimateCost(mapCursorModel([...models][0]), totalTokens);
     }
 
     // ── Duration ──────────────────────────────────────────────
@@ -378,7 +398,7 @@ export class CursorParser implements Parser {
     if (composer.subtitle) topics.push(composer.subtitle);
 
     // Map model names for display
-    const displayModels = [...models].map(mapCursorModel);
+    const displayModels = [...new Set([...models].map(mapCursorModel))];
 
     return {
       id: composer.composerId,

@@ -241,24 +241,36 @@ export class ClaudeCodeParser implements Parser {
       const totalTokens = emptyTokenUsage();
 
       for (const row of assistantRows) {
-        if (row.cost_usd) totalCost += row.cost_usd;
+        if (row.cost_usd !== null) totalCost += row.cost_usd;
         if (row.duration_ms) {
           totalDurationMs += Math.min(row.duration_ms, MAX_MSG_DURATION_MS);
         }
         if (row.model) models.add(row.model);
 
         // Parse usage from the full message JSON
+        const rowTokens = emptyTokenUsage();
         try {
           const msg = JSON.parse(row.message) as { usage?: Record<string, number> };
           if (msg.usage) {
             const u = msg.usage;
-            totalTokens.input += u.input_tokens ?? 0;
-            totalTokens.output += u.output_tokens ?? 0;
-            totalTokens.cacheRead += u.cache_read_input_tokens ?? 0;
-            totalTokens.cacheWrite += u.cache_creation_input_tokens ?? 0;
+            rowTokens.input = u.input_tokens ?? 0;
+            rowTokens.output = u.output_tokens ?? 0;
+            rowTokens.cacheRead = u.cache_read_input_tokens ?? 0;
+            rowTokens.cacheWrite = u.cache_creation_input_tokens ?? 0;
+            rowTokens.total = rowTokens.input + rowTokens.output + rowTokens.cacheRead + rowTokens.cacheWrite;
           }
         } catch {
           // skip
+        }
+
+        totalTokens.input += rowTokens.input;
+        totalTokens.output += rowTokens.output;
+        totalTokens.cacheRead += rowTokens.cacheRead;
+        totalTokens.cacheWrite += rowTokens.cacheWrite;
+
+        // Prefer recorded DB cost. If missing, estimate per message/model.
+        if (row.cost_usd === null && row.model && rowTokens.total > 0) {
+          totalCost += estimateCost(row.model, rowTokens);
         }
       }
 
@@ -343,7 +355,27 @@ export class ClaudeCodeParser implements Parser {
 
     totalTokens.total = totalTokens.input + totalTokens.output + totalTokens.cacheRead + totalTokens.cacheWrite;
 
-    if (totalTokens.total > 0 && models.size > 0) {
+    for (const msg of dedupedAssistant) {
+      if (!msg.message.usage || !msg.message.model) continue;
+      const u = msg.message.usage;
+      const msgTokens = {
+        input: u.input_tokens ?? 0,
+        output: u.output_tokens ?? 0,
+        reasoning: 0,
+        cacheRead: u.cache_read_input_tokens ?? 0,
+        cacheWrite: u.cache_creation_input_tokens ?? 0,
+        total:
+          (u.input_tokens ?? 0) +
+          (u.output_tokens ?? 0) +
+          (u.cache_read_input_tokens ?? 0) +
+          (u.cache_creation_input_tokens ?? 0),
+      };
+      if (msgTokens.total > 0) {
+        totalCost += estimateCost(msg.message.model, msgTokens);
+      }
+    }
+
+    if (totalCost === 0 && totalTokens.total > 0 && models.size > 0) {
       totalCost = estimateCost([...models][0], totalTokens);
     }
 
