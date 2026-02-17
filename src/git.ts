@@ -1,6 +1,5 @@
 import { execFileSync } from 'node:child_process';
-import { existsSync } from 'node:fs';
-import { join, basename } from 'node:path';
+import { basename } from 'node:path';
 import type { GitActivity, GitCommit } from './types.js';
 
 /**
@@ -11,8 +10,8 @@ export function getGitActivity(
   date: string,
   authorFilter?: string | null,
 ): GitActivity | null {
-  // Verify it's a git repo
-  if (!existsSync(join(projectPath, '.git'))) return null;
+  // Verify it's a git repo (supports worktrees where .git may be a file)
+  if (!isGitRepo(projectPath)) return null;
 
   try {
     const args = [
@@ -80,6 +79,19 @@ export function getGitActivity(
     };
   } catch {
     return null;
+  }
+}
+
+function isGitRepo(projectPath: string): boolean {
+  try {
+    const output = execFileSync(
+      'git',
+      ['rev-parse', '--is-inside-work-tree'],
+      { cwd: projectPath, encoding: 'utf-8', timeout: 10_000 },
+    ).trim();
+    return output === 'true';
+  } catch {
+    return false;
   }
 }
 
