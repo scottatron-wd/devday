@@ -13,6 +13,11 @@ import { getGitActivity } from './git.js';
 import { buildDayRecap } from './merge.js';
 import { summarizeRecap } from './summarize.js';
 import { renderRecap } from './render.js';
+import {
+  buildWorklogMarkdown,
+  resolveVaultPath,
+  writeObsidianInboxEntry,
+} from './worklog.js';
 import type { Session, GitActivity, Parser } from './types.js';
 
 let verbose = false;
@@ -48,6 +53,10 @@ program
   .option('-s, --standup', 'output a short standup-ready summary')
   .option('-j, --json', 'output raw JSON')
   .option('-v, --verbose', 'show debug output')
+  .option('--worklog', 'output detailed markdown worklog (no cost/token tables)')
+  .option('--write-obsidian-inbox', 'write worklog markdown into Obsidian inbox')
+  .option('--obsidian-vault <path>', 'Obsidian vault path (default: ~/obsidian-notebook)')
+  .option('--worklog-title <title>', 'custom title for generated worklog note')
   .option('--no-git', 'skip git log integration')
   .option('--no-summarize', 'skip LLM summarization')
   .addHelpText('after', `
@@ -58,6 +67,8 @@ Examples:
   $ devday --standup          short standup format
   $ devday --json             machine-readable output
   $ devday -d yesterday -s    yesterday's standup
+  $ devday --worklog          detailed work log markdown
+  $ devday --worklog --write-obsidian-inbox
 
 Environment variables:
   OPENAI_API_KEY              enables AI-powered summaries via OpenAI (recommended)
@@ -74,6 +85,7 @@ Supported tools:
     verbose = opts.verbose ?? false;
     const date = resolveDate(opts.date);
     const config = loadConfig();
+    const wantsWorklog = (opts.worklog ?? false) || (opts.writeObsidianInbox ?? false);
 
     // Validate date format
     if (!isValidDateString(date)) {
@@ -177,15 +189,53 @@ Supported tools:
       // ── Summarize (only if API key is available) ──────────
       const hasApiKey = config.preferredSummarizer !== 'none';
 
-      if (hasApiKey && opts.summarize !== false) {
+      if (!wantsWorklog && hasApiKey && opts.summarize !== false) {
         debug(`using ${config.preferredSummarizer} for summarization`);
         spinner.text = 'Generating summary...';
         recap = await summarizeRecap(recap, config);
-      } else if (!hasApiKey) {
+      } else if (!hasApiKey && !wantsWorklog) {
         debug('no API key set, skipping summarization');
       }
 
       spinner.stop();
+
+      if (wantsWorklog) {
+        const markdown = buildWorklogMarkdown(recap);
+
+        if (opts.writeObsidianInbox) {
+          const vaultPath = resolveVaultPath(opts.obsidianVault);
+          const outputPath = writeObsidianInboxEntry(recap, markdown, {
+            vaultPath,
+            cwd: process.cwd(),
+            title: opts.worklogTitle,
+            source: 'devday --worklog --write-obsidian-inbox',
+          });
+
+          if (isJson) {
+            console.log(JSON.stringify({
+              date,
+              mode: 'worklog',
+              outputPath,
+            }, null, 2));
+          } else {
+            console.log('');
+            console.log(chalk.green(`  Wrote Obsidian worklog: ${outputPath}`));
+            console.log('');
+          }
+          return;
+        }
+
+        if (isJson) {
+          console.log(JSON.stringify({
+            date,
+            mode: 'worklog',
+            markdown,
+          }, null, 2));
+        } else {
+          console.log(markdown);
+        }
+        return;
+      }
 
       // ── Standup without API key → exit early ────────────────
       if (opts.standup && !hasApiKey) {
