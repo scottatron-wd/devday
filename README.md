@@ -1,6 +1,6 @@
 # devday
 
-End-of-day recap for AI-assisted coding sessions. Reads your local conversations from OpenCode, Claude Code, and Cursor, cross-references with git, and generates standup-ready summaries.
+End-of-day recap for AI-assisted coding sessions. Reads your local conversations from OpenCode, Claude Code, Cursor, Codex, and GitHub Copilot CLI, cross-references with git, and generates standup-ready summaries.
 
 ![devday output](screenshot.png)
 
@@ -19,6 +19,7 @@ End-of-day recap for AI-assisted coding sessions. Reads your local conversations
 | Claude Code | `~/.claude/` (SQLite + JSONL) |
 | Cursor | `~/Library/Application Support/Cursor/User/globalStorage/state.vscdb` |
 | Codex | `~/.codex/sessions/` (JSONL) |
+| GitHub Copilot CLI | `~/.copilot/session-state/` (JSONL + workspace metadata) |
 | Gemini CLI | WIP |
 
 ## Install

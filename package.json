@@ -1,7 +1,7 @@
 {
   "name": "devday",
   "version": "0.1.0",
-  "description": "End-of-day recap for AI-assisted coding sessions. Reads OpenCode, Claude Code, and Cursor conversations, cross-references with git, and generates standup-ready summaries.",
+  "description": "End-of-day recap for AI-assisted coding sessions. Reads OpenCode, Claude Code, Cursor, Codex, and GitHub Copilot CLI conversations, cross-references with git, and generates standup-ready summaries.",
   "type": "module",
   "bin": {
     "devday": "./bin/devday.js"
@@ -34,6 +34,9 @@
     "opencode",
     "claude-code",
     "cursor",
+    "codex",
+    "github-copilot",
+    "copilot-cli",
     "developer-tools"
   ],
   "author": "Ujjwal Jain",
