@@ -10,7 +10,7 @@ End-of-day recap for AI-assisted coding sessions. Reads your local conversations
 - Shows tokens used, estimated cost, duration, and models per session
 - Groups sessions by project and shows git commits alongside
 - Optionally generates first-person standup messages via OpenAI or Anthropic
-- Can generate detailed per-session worklog summaries and write one Obsidian inbox note per session
+- Can generate conversational per-session worklog summaries and write one Obsidian inbox note per session
 
 ## Supported tools
 
@@ -57,7 +57,7 @@ devday -v                     # debug output
 
 ## Obsidian worklog output
 
-Generate a detailed worklog with session IDs:
+Generate a detailed conversational worklog:
 
 ```bash
 devday --worklog
@@ -88,6 +88,8 @@ You can provide your own prompt file:
 ```bash
 devday --worklog --session-summary-instructions ~/my-prompts/devday-session-summary.md
 ```
+
+The worklog output includes separate tool and skill lists per session.
 
 ## AI summaries
 
