@@ -506,11 +506,30 @@ function toFriendlyHeading(value: string): string {
     .replace(/\s+/g, ' ')
     .trim();
 
-  clean = clean.replace(/^(please|can you|could you|let's|lets)\s+/i, '');
+  const prefixPatterns = [
+    /^(please|kindly)\s+/i,
+    /^(can you|could you|would you|will you)\s+/i,
+    /^(let's|lets)\s+/i,
+    /^(i need to|we need to)\s+/i,
+  ];
+
+  let updated = true;
+  while (updated) {
+    updated = false;
+    for (const pattern of prefixPatterns) {
+      const next = clean.replace(pattern, '');
+      if (next !== clean) {
+        clean = next.trimStart();
+        updated = true;
+      }
+    }
+  }
+
   clean = clean.replace(/[.?!:;]+$/g, '').trim();
 
   if (!clean) return '';
-  return truncateSentence(clean, 90);
+  const capped = truncateSentence(clean, 90);
+  return capped.charAt(0).toUpperCase() + capped.slice(1);
 }
 
 function formatToolTimeline(toolCallSummaries: string[]): string {
