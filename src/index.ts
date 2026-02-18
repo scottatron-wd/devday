@@ -15,8 +15,9 @@ import { summarizeRecap } from './summarize.js';
 import { renderRecap } from './render.js';
 import {
   buildWorklogMarkdown,
+  buildSessionSummaries,
   resolveVaultPath,
-  writeObsidianInboxEntry,
+  writeObsidianInboxEntries,
 } from './worklog.js';
 import type { Session, GitActivity, Parser } from './types.js';
 
@@ -57,6 +58,7 @@ program
   .option('--write-obsidian-inbox', 'write worklog markdown into Obsidian inbox')
   .option('--obsidian-vault <path>', 'Obsidian vault path (default: ~/obsidian-notebook)')
   .option('--worklog-title <title>', 'custom title for generated worklog note')
+  .option('--session-summary-instructions <path>', 'markdown prompt file for session summaries (used in --worklog)')
   .option('--no-git', 'skip git log integration')
   .option('--no-summarize', 'skip LLM summarization')
   .addHelpText('after', `
@@ -69,6 +71,7 @@ Examples:
   $ devday -d yesterday -s    yesterday's standup
   $ devday --worklog          detailed work log markdown
   $ devday --worklog --write-obsidian-inbox
+  $ devday --worklog --session-summary-instructions ./prompts/worklog-session-summary.md
 
 Environment variables:
   OPENAI_API_KEY              enables AI-powered summaries via OpenAI (recommended)
@@ -200,26 +203,41 @@ Supported tools:
       spinner.stop();
 
       if (wantsWorklog) {
-        const markdown = buildWorklogMarkdown(recap);
+        const sessionSummaries = await buildSessionSummaries(recap, config, {
+          summarizeWithLlm: opts.summarize !== false,
+          instructionsPath: opts.sessionSummaryInstructions,
+        });
+
+        if (sessionSummaries.instructionsPath) {
+          debug(`session summary instructions: ${sessionSummaries.instructionsPath}`);
+        } else {
+          debug('session summary instructions: built-in fallback');
+        }
+
+        const markdown = buildWorklogMarkdown(recap, sessionSummaries.summaries);
 
         if (opts.writeObsidianInbox) {
           const vaultPath = resolveVaultPath(opts.obsidianVault);
-          const outputPath = writeObsidianInboxEntry(recap, markdown, {
+          const outputPaths = writeObsidianInboxEntries(recap, {
             vaultPath,
             cwd: process.cwd(),
             title: opts.worklogTitle,
             source: 'devday --worklog --write-obsidian-inbox',
+            sessionSummaries: sessionSummaries.summaries,
           });
 
           if (isJson) {
             console.log(JSON.stringify({
               date,
               mode: 'worklog',
-              outputPath,
+              outputPaths,
             }, null, 2));
           } else {
             console.log('');
-            console.log(chalk.green(`  Wrote Obsidian worklog: ${outputPath}`));
+            console.log(chalk.green(`  Wrote ${outputPaths.length} Obsidian session worklog note(s):`));
+            for (const path of outputPaths) {
+              console.log(chalk.dim(`    - ${path}`));
+            }
             console.log('');
           }
           return;
