@@ -4,6 +4,7 @@ import { homedir } from 'node:os';
 import Database from 'better-sqlite3';
 import type { Parser, Session, TokenUsage } from '../types.js';
 import { estimateCost, emptyTokenUsage, sumTokens } from '../cost.js';
+import { truncateConversationDigest } from './digest.js';
 
 // ── Raw shapes from Claude Code storage ──────────────────────────
 
@@ -566,10 +567,7 @@ export class ClaudeCodeParser implements Parser {
     }
 
     // Cap total digest
-    let conversationDigest = digestParts.join('\n\n');
-    if (conversationDigest.length > 4000) {
-      conversationDigest = conversationDigest.slice(0, 4000) + '\n\n[...truncated]';
-    }
+    const conversationDigest = truncateConversationDigest(digestParts.join('\n\n'));
 
     return {
       conversationDigest,

@@ -3,6 +3,7 @@ import { basename, join } from 'node:path';
 import { homedir } from 'node:os';
 import type { Parser, Session } from '../types.js';
 import { emptyTokenUsage, estimateCost } from '../cost.js';
+import { truncateConversationDigest } from './digest.js';
 
 interface CopilotEvent {
   type?: string;
@@ -254,10 +255,7 @@ export class CopilotParser implements Parser {
       costUsd = estimateCost([...models][0], tokens);
     }
 
-    let conversationDigest = digestParts.join('\n\n');
-    if (conversationDigest.length > 4000) {
-      conversationDigest = conversationDigest.slice(0, 4000) + '\n\n[...truncated]';
-    }
+    const conversationDigest = truncateConversationDigest(digestParts.join('\n\n'));
 
     return {
       id: sessionId,

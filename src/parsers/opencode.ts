@@ -3,6 +3,7 @@ import { join, basename } from 'node:path';
 import { homedir } from 'node:os';
 import type { Parser, Session, TokenUsage } from '../types.js';
 import { estimateCost, emptyTokenUsage, sumTokens } from '../cost.js';
+import { truncateConversationDigest } from './digest.js';
 
 // ── Raw JSON shapes from OpenCode storage ────────────────────────
 
@@ -376,10 +377,7 @@ export class OpenCodeParser implements Parser {
     }
 
     // Cap total digest at ~4000 chars (fits in an LLM context easily)
-    let conversationDigest = digestParts.join('\n\n');
-    if (conversationDigest.length > 4000) {
-      conversationDigest = conversationDigest.slice(0, 4000) + '\n\n[...truncated]';
-    }
+    const conversationDigest = truncateConversationDigest(digestParts.join('\n\n'));
 
     return {
       conversationDigest,
