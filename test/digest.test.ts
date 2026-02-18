@@ -1,6 +1,10 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { truncateConversationDigest } from '../src/parsers/digest.ts';
+import {
+  isDigestTruncated,
+  truncateConversationDigest,
+  truncateDigestMessageText,
+} from '../src/parsers/digest.ts';
 
 test('truncateConversationDigest keeps short digests unchanged', () => {
   const digest = '[User]: quick ask\n\n[Assistant]: quick response';
@@ -19,4 +23,15 @@ test('truncateConversationDigest preserves beginning and end of long digests', (
   assert.ok(truncated.includes(end));
   assert.ok(truncated.includes('[...truncated middle section...]'));
   assert.ok(truncated.length <= 1200);
+});
+
+test('truncateDigestMessageText keeps short text and truncates long text', () => {
+  assert.equal(truncateDigestMessageText('short', 10), 'short');
+  assert.equal(truncateDigestMessageText('x'.repeat(20), 8), 'xxxxxxxx...');
+});
+
+test('isDigestTruncated detects digest marker', () => {
+  const digest = '[User]: start\n\n[...truncated middle section...]\n\n[Assistant]: end';
+  assert.equal(isDigestTruncated(digest), true);
+  assert.equal(isDigestTruncated('[User]: full digest'), false);
 });

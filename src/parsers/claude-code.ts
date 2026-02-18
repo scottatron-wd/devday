@@ -4,7 +4,7 @@ import { homedir } from 'node:os';
 import Database from 'better-sqlite3';
 import type { Parser, Session, TokenUsage } from '../types.js';
 import { estimateCost, emptyTokenUsage, sumTokens } from '../cost.js';
-import { truncateConversationDigest } from './digest.js';
+import { truncateConversationDigest, truncateDigestMessageText } from './digest.js';
 
 // ── Raw shapes from Claude Code storage ──────────────────────────
 
@@ -516,7 +516,7 @@ export class ClaudeCodeParser implements Parser {
 
         // Only include human text, not tool results
         if (typeof content === 'string') {
-          const truncated = content.length > 500 ? content.slice(0, 500) + '...' : content;
+          const truncated = truncateDigestMessageText(content);
           digestParts.push(`[User]: ${truncated}`);
         }
         // Array content with tool_result entries → skip for digest
@@ -560,7 +560,7 @@ export class ClaudeCodeParser implements Parser {
 
         if (textParts.length > 0) {
           const text = textParts.join('\n');
-          const truncated = text.length > 500 ? text.slice(0, 500) + '...' : text;
+          const truncated = truncateDigestMessageText(text);
           digestParts.push(`[Assistant]: ${truncated}`);
         }
       }

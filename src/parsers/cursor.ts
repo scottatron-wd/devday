@@ -4,7 +4,7 @@ import { homedir } from 'node:os';
 import Database from 'better-sqlite3';
 import type { Parser, Session, TokenUsage } from '../types.js';
 import { estimateCost, emptyTokenUsage, sumTokens } from '../cost.js';
-import { truncateConversationDigest } from './digest.js';
+import { truncateConversationDigest, truncateDigestMessageText } from './digest.js';
 
 // ── Cursor model name → known model ID mapping ──────────────────
 
@@ -361,10 +361,10 @@ export class CursorParser implements Parser {
       if (!b.text?.trim()) continue;
 
       if (b.type === 1) {
-        const truncated = b.text.length > 500 ? b.text.slice(0, 500) + '...' : b.text;
+        const truncated = truncateDigestMessageText(b.text);
         digestParts.push(`[User]: ${truncated}`);
       } else if (b.type === 2) {
-        const truncated = b.text.length > 500 ? b.text.slice(0, 500) + '...' : b.text;
+        const truncated = truncateDigestMessageText(b.text);
         digestParts.push(`[Assistant]: ${truncated}`);
       }
 

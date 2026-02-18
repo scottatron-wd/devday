@@ -3,7 +3,7 @@ import { basename, join } from 'node:path';
 import { homedir } from 'node:os';
 import type { Parser, Session } from '../types.js';
 import { estimateCost, emptyTokenUsage } from '../cost.js';
-import { truncateConversationDigest } from './digest.js';
+import { truncateConversationDigest, truncateDigestMessageText } from './digest.js';
 
 interface CodexLine {
   timestamp?: string;
@@ -376,8 +376,7 @@ export class CodexParser implements Parser {
   }
 
   private truncateText(text: string, maxLen = 500): string {
-    if (text.length <= maxLen) return text;
-    return text.slice(0, maxLen) + '...';
+    return truncateDigestMessageText(text, maxLen);
   }
 
   private truncatePrompt(prompt: string): string {

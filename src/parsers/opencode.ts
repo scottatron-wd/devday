@@ -3,7 +3,7 @@ import { join, basename } from 'node:path';
 import { homedir } from 'node:os';
 import type { Parser, Session, TokenUsage } from '../types.js';
 import { estimateCost, emptyTokenUsage, sumTokens } from '../cost.js';
-import { truncateConversationDigest } from './digest.js';
+import { truncateConversationDigest, truncateDigestMessageText } from './digest.js';
 
 // ── Raw JSON shapes from OpenCode storage ────────────────────────
 
@@ -370,8 +370,7 @@ export class OpenCodeParser implements Parser {
       if (textParts.length > 0) {
         const role = msg.role === 'user' ? 'User' : 'Assistant';
         const text = textParts.join('\n');
-        // Truncate individual messages to keep digest manageable
-        const truncated = text.length > 500 ? text.slice(0, 500) + '...' : text;
+        const truncated = truncateDigestMessageText(text);
         digestParts.push(`[${role}]: ${truncated}`);
       }
     }
