@@ -166,7 +166,7 @@ test('buildSessionSummaries uses fallback summaries without API keys', async () 
 
   assert.equal(result.summaries.size, 2);
   const first = result.summaries.get('session-1') ?? '';
-  assert.ok(first.includes('I worked on Add worklog mode'));
+  assert.ok(first.includes('we worked on Add worklog mode'));
 });
 
 test('buildWorklogMarkdown renders descriptive summary lines', async () => {
@@ -209,6 +209,8 @@ test('buildObsidianInboxEntries creates one entry per session with session_id', 
   assert.ok(entries[0].content.includes('agent: "codex"'));
   assert.ok(entries[0].content.includes('tool: "devday"'));
   assert.ok(entries[0].content.includes('cwd: "/tmp/project-alpha"'));
+  assert.ok(entries[0].content.includes('# project-alpha: Add worklog mode'));
+  assert.ok(!entries[0].content.includes('# Devday Session Worklog'));
 });
 
 test('resolveVaultPath expands home shorthand', () => {

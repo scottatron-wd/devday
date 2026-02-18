@@ -45,13 +45,13 @@ const DEFAULT_SESSION_SUMMARY_INSTRUCTIONS = `# Devday Session Summary Instructi
 You are summarizing one coding session from a developer worklog.
 
 ## Output style
-- Write in a conversational first-person style.
-- Prefer 1-3 short paragraphs that describe progression across the session.
+- Write in a conversational first-person plural style using "we".
+- Prefer 1-3 short paragraphs that describe progression across the full session.
 - You may add headings only if they improve clarity.
 
 ## Focus
 - Emphasize outcomes, decisions, and technical changes.
-- Explain how the session progressed from start to finish.
+- Explain how the session progressed from start to finish (early, middle, and late phases).
 - Call out noteworthy challenges, tradeoffs, or discoveries where relevant.
 - Mention concrete files/systems if useful.
 
@@ -223,9 +223,10 @@ function buildSingleSessionMarkdown(
   const toolsUsed = extractToolNames(session);
   const skillsUsed = extractSkillNames(session);
   const files = formatFiles(session.filesTouched, project.projectPath);
+  const heading = buildSessionHeadingTitle(session);
 
   const lines: string[] = [];
-  lines.push(`# Devday Session Worklog (${project.projectName})`);
+  lines.push(`# ${project.projectName}: ${heading}`);
   lines.push('');
   lines.push(`Session: \`${session.id}\`  |  ${formatLocalClock(session.startedAt)} - ${formatLocalClock(session.endedAt)} (${formatDuration(session.durationMs)})`);
   lines.push('');
@@ -313,25 +314,25 @@ function buildFallbackSessionSummary(session: Session, project: ProjectSummary):
   const tools = extractToolNames(session).slice(0, 4);
 
   const chunks: string[] = [];
-  chunks.push(`In this session I worked on ${session.title ?? `a ${session.tool} task`} in ${project.projectName}.`);
+  chunks.push(`In this session we worked on ${session.title ?? `a ${session.tool} task`} in ${project.projectName}.`);
 
   if (firstUser) {
-    chunks.push(`I started by focusing on ${truncateSentence(firstUser, 180)}.`);
+    chunks.push(`We started by focusing on ${truncateSentence(firstUser, 180)}.`);
     if (looksLikeChallenge(firstUser)) {
       chunks.push('A key part of the session was working through that challenge to keep momentum.');
     }
   }
 
   if (tools.length > 0) {
-    chunks.push(`As the work progressed, I relied on ${tools.join(', ')} to move the task forward.`);
+    chunks.push(`As the work progressed, we relied on ${tools.join(', ')} to move the task forward.`);
   }
 
   if (lastAssistant) {
-    chunks.push(`By the end, ${truncateSentence(lastAssistant, 180)}.`);
+    chunks.push(`By the end, we had reached a stable outcome: ${truncateSentence(lastAssistant, 180)}.`);
   }
 
   if (files.length > 0) {
-    chunks.push(`The most relevant files were ${files.join(', ')}.`);
+    chunks.push(`The most relevant files we touched were ${files.join(', ')}.`);
   }
 
   return chunks.join(' ');
@@ -374,7 +375,10 @@ function buildSessionPrompt(
   const files = formatFiles(session.filesTouched, project.projectPath).join(', ') || 'None';
   const toolsUsed = extractToolNames(session).join(', ') || 'None';
   const skillsUsed = extractSkillNames(session).join(', ') || 'None';
+  const toolTimeline = formatToolTimeline(session.toolCallSummaries);
   const digest = session.conversationDigest || 'No transcript text available.';
+  const nativeSummary = session.summary?.trim() || 'None';
+  const digestTruncated = digest.includes('[...truncated]') ? 'yes' : 'no';
 
   return `${instructions}
 
@@ -384,9 +388,15 @@ function buildSessionPrompt(
 - Agent: ${session.tool}
 - Start: ${session.startedAt.toISOString()}
 - End: ${session.endedAt.toISOString()}
+- Message counts: ${session.messageCount} total (${session.userMessageCount} user, ${session.assistantMessageCount} assistant)
+- Native session summary: ${nativeSummary}
+- Transcript truncated: ${digestTruncated}
 - Files touched: ${files}
 - Tools used: ${toolsUsed}
 - Skills used: ${skillsUsed}
+
+## Tool Activity Timeline
+${toolTimeline}
 
 ## Conversation digest
 ${digest}
@@ -470,7 +480,59 @@ function normalizeSummary(text: string): string {
     .join('\n')
     .trim();
 
-  return cleaned || 'I completed focused development work in this session.';
+  return cleaned || 'We completed focused development work in this session.';
+}
+
+function buildSessionHeadingTitle(session: Session): string {
+  const candidates = [
+    session.title,
+    session.summary,
+    extractFirstUserMessage(session.conversationDigest),
+    extractLastAssistantMessage(session.conversationDigest),
+  ];
+
+  for (const candidate of candidates) {
+    if (!candidate) continue;
+    const friendly = toFriendlyHeading(candidate);
+    if (friendly) return friendly;
+  }
+
+  return `Work session (${session.tool})`;
+}
+
+function toFriendlyHeading(value: string): string {
+  let clean = sanitizeTranscriptMessage(value)
+    .replace(/^["'`]+|["'`]+$/g, '')
+    .replace(/\s+/g, ' ')
+    .trim();
+
+  clean = clean.replace(/^(please|can you|could you|let's|lets)\s+/i, '');
+  clean = clean.replace(/[.?!:;]+$/g, '').trim();
+
+  if (!clean) return '';
+  return truncateSentence(clean, 90);
+}
+
+function formatToolTimeline(toolCallSummaries: string[]): string {
+  const entries = toolCallSummaries
+    .map((value) => value.trim())
+    .filter(Boolean)
+    .map((value) => truncateSentence(value, 200));
+
+  if (entries.length === 0) return 'None';
+
+  const limit = 36;
+  const sampled = entries.length > limit
+    ? [...entries.slice(0, 18), ...entries.slice(-18)]
+    : entries;
+  const omitted = entries.length - sampled.length;
+
+  const lines = sampled.map((entry, index) => `${index + 1}. ${entry}`);
+  if (omitted > 0) {
+    lines.push(`... (${omitted} additional tool events omitted from the middle)`);
+  }
+
+  return lines.join('\n');
 }
 
 function formatFiles(files: string[], projectPath: string): string[] {
