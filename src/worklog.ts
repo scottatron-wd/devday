@@ -44,20 +44,21 @@ const DEFAULT_SESSION_SUMMARY_INSTRUCTIONS = `# Devday Session Summary Instructi
 
 You are summarizing one coding session from a developer worklog.
 
-## Output format
-- Return exactly 2-4 concise bullet points.
-- Start each bullet with "- ".
-- Use first person past tense ("I updated...", "I fixed...", "I investigated...").
+## Output style
+- Write in a conversational first-person style.
+- Prefer 1-3 short paragraphs that describe progression across the session.
+- You may add headings only if they improve clarity.
 
-## Priorities
-- Focus on outcomes, decisions, and technical changes.
-- Mention concrete files, systems, or integrations when available.
-- Mention blockers or follow-up only if clearly present.
+## Focus
+- Emphasize outcomes, decisions, and technical changes.
+- Explain how the session progressed from start to finish.
+- Call out noteworthy challenges, tradeoffs, or discoveries where relevant.
+- Mention concrete files/systems if useful.
 
-## Exclusions
-- Do not mention token usage, cost, or message counts.
-- Do not mention model/provider names.
-- Do not repeat raw transcript text verbatim unless needed.
+## Avoid
+- Token/cost/model/provider details.
+- Forced templates or strict bullet-only output.
+- Long verbatim transcript quotes.
 `;
 
 export async function buildSessionSummaries(
@@ -122,36 +123,13 @@ export function buildWorklogMarkdown(
   recap: DayRecap,
   sessionSummaries: Map<string, string> = new Map(),
 ): string {
-  const contexts = collectSessionContexts(recap);
   const lines: string[] = [];
 
   lines.push(`# Devday Worklog (${recap.date})`);
   lines.push('');
-  lines.push('## Local Context');
-  lines.push(`- Date: ${recap.date}`);
-  lines.push(`- Sessions captured: ${contexts.length}`);
 
-  const projectPaths = [...new Set(recap.projects.map((p) => p.projectPath).filter(Boolean))] as string[];
-  if (projectPaths.length > 0) {
-    lines.push('- Repositories:');
-    for (const path of projectPaths.sort()) {
-      lines.push(`  - \`${path}\``);
-    }
-  }
-  lines.push('');
-
-  lines.push('## Work Completed');
   for (const project of recap.projects) {
     lines.push(...buildProjectSection(project, sessionSummaries));
-  }
-
-  const followUps = extractFollowUps(contexts.map((ctx) => ctx.session));
-  if (followUps.length > 0) {
-    lines.push('');
-    lines.push('## Follow-up');
-    for (const item of followUps) {
-      lines.push(`- ${item}`);
-    }
   }
 
   return lines.join('\n').trimEnd() + '\n';
@@ -164,7 +142,7 @@ export function buildObsidianInboxEntries(
   const now = options.now ?? new Date();
   const contexts = collectSessionContexts(recap);
   const source = options.source ?? 'devday --worklog --write-obsidian-inbox';
-  const agent = options.agent ?? 'devday';
+  const toolName = options.agent ?? 'devday';
 
   return contexts.map((ctx, index) => {
     const { project, session } = ctx;
@@ -173,6 +151,7 @@ export function buildObsidianInboxEntries(
     const slug = slugify(title) || 'update';
     const shortId = session.id.slice(0, 8);
     const startedStamp = formatMelbourne(session.startedAt).fileStamp;
+    const cwd = session.projectPath ?? options.cwd;
 
     const filePath = join(
       options.vaultPath,
@@ -184,12 +163,12 @@ export function buildObsidianInboxEntries(
       '---',
       `title: "${escapeYamlString(title)}"`,
       `created_at: "${formatMelbourne(now).iso}"`,
-      `agent: "${escapeYamlString(agent)}"`,
-      `cwd: "${escapeYamlString(options.cwd)}"`,
+      `agent: "${escapeYamlString(session.tool)}"`,
+      `cwd: "${escapeYamlString(cwd)}"`,
       'type: "work-summary"',
       `date: "${recap.date}"`,
       `project: "${escapeYamlString(project.projectName)}"`,
-      `tool: "${escapeYamlString(session.tool)}"`,
+      `tool: "${escapeYamlString(toolName)}"`,
       `source: "${escapeYamlString(source)}"`,
       'tags: [squirl-inbox, work-summary, devday]',
       `session_id: "${escapeYamlString(session.id)}"`,
@@ -240,38 +219,40 @@ function buildSingleSessionMarkdown(
   session: Session,
   sessionSummaries?: Map<string, string>,
 ): string {
-  const lines: string[] = [];
   const summary = sessionSummaries?.get(session.id) ?? buildFallbackSessionSummary(session, project);
+  const toolsUsed = extractToolNames(session);
+  const skillsUsed = extractSkillNames(session);
+  const files = formatFiles(session.filesTouched, project.projectPath);
 
+  const lines: string[] = [];
   lines.push(`# Devday Session Worklog (${project.projectName})`);
   lines.push('');
-  lines.push('## Local Context');
-  lines.push(`- Project: \`${project.projectPath}\``);
-  lines.push(`- Session ID: \`${session.id}\``);
-  lines.push(`- Tool: ${session.tool}`);
-  lines.push(`- Time: ${formatLocalClock(session.startedAt)} - ${formatLocalClock(session.endedAt)} (${formatDuration(session.durationMs)})`);
+  lines.push(`Session: \`${session.id}\`  |  ${formatLocalClock(session.startedAt)} - ${formatLocalClock(session.endedAt)} (${formatDuration(session.durationMs)})`);
   lines.push('');
-  lines.push('## Work Completed');
-  for (const line of summary.split('\n')) {
-    if (!line.trim()) continue;
-    lines.push(line.startsWith('- ') ? line : `- ${line.trim()}`);
-  }
+  lines.push(summary.trim());
 
-  const actions = cleanList(session.toolCallSummaries, 10, 120);
-  if (actions.length > 0) {
-    lines.push(`- Key actions: ${actions.join('; ')}`);
-  }
-
-  const files = formatFiles(session.filesTouched, project.projectPath);
-  if (files.length > 0) {
-    lines.push(`- Files touched: ${files.join(', ')}`);
-  }
-
-  const followUp = extractLastUserMessage(session.conversationDigest);
-  if (followUp) {
+  if (toolsUsed.length > 0) {
     lines.push('');
-    lines.push('## Follow-up');
-    lines.push(`- ${truncateSentence(followUp, 180)}`);
+    lines.push('## Tools Used');
+    for (const tool of toolsUsed) {
+      lines.push(`- ${tool}`);
+    }
+  }
+
+  if (skillsUsed.length > 0) {
+    lines.push('');
+    lines.push('## Skills Used');
+    for (const skill of skillsUsed) {
+      lines.push(`- ${skill}`);
+    }
+  }
+
+  if (files.length > 0) {
+    lines.push('');
+    lines.push('## Files Touched');
+    for (const file of files) {
+      lines.push(`- ${file}`);
+    }
   }
 
   return lines.join('\n');
@@ -282,73 +263,90 @@ function buildProjectSection(
   sessionSummaries: Map<string, string>,
 ): string[] {
   const lines: string[] = [];
-  lines.push(`### ${project.projectName}`);
+  lines.push(`## ${project.projectName}`);
 
   const sessions = [...project.sessions].sort(
     (a, b) => a.startedAt.getTime() - b.startedAt.getTime(),
   );
 
   for (const session of sessions) {
-    lines.push(`- ${session.title ?? 'Untitled session'} [${session.tool}]`);
-    lines.push(`  - Session ID: \`${session.id}\``);
-    lines.push(`  - Time: ${formatLocalClock(session.startedAt)} - ${formatLocalClock(session.endedAt)} (${formatDuration(session.durationMs)})`);
-
     const summary = sessionSummaries.get(session.id) ?? buildFallbackSessionSummary(session, project);
-    lines.push(`  - Summary: ${inlineSummary(summary)}`);
-
-    const actions = cleanList(session.toolCallSummaries, 8, 100);
-    if (actions.length > 0) {
-      lines.push(`  - Key actions: ${actions.join('; ')}`);
-    }
-
+    const toolsUsed = extractToolNames(session);
+    const skillsUsed = extractSkillNames(session);
     const files = formatFiles(session.filesTouched, project.projectPath);
+
+    lines.push('');
+    lines.push(`### ${session.title ?? 'Untitled session'} (${session.tool})`);
+    lines.push(`Session ID: \`${session.id}\``);
+    lines.push(`Time: ${formatLocalClock(session.startedAt)} - ${formatLocalClock(session.endedAt)} (${formatDuration(session.durationMs)})`);
+    lines.push('');
+    lines.push(summary.trim());
+
+    if (toolsUsed.length > 0) {
+      lines.push('');
+      lines.push(`Tools used: ${toolsUsed.join(', ')}`);
+    }
+    if (skillsUsed.length > 0) {
+      lines.push(`Skills used: ${skillsUsed.join(', ')}`);
+    }
     if (files.length > 0) {
-      lines.push(`  - Files touched: ${files.join(', ')}`);
+      lines.push(`Files touched: ${files.join(', ')}`);
     }
   }
 
   if (project.git && project.git.commits.length > 0) {
-    lines.push('- Git commits:');
+    lines.push('');
+    lines.push('Git commits:');
     for (const commit of project.git.commits.slice(0, 8)) {
-      lines.push(`  - ${commit.shortHash} ${commit.message}`);
+      lines.push(`- ${commit.shortHash} ${commit.message}`);
     }
   }
 
+  lines.push('');
   return lines;
-}
-
-function inlineSummary(value: string): string {
-  return value
-    .split('\n')
-    .map((line) => line.replace(/^\s*-\s*/, '').trim())
-    .filter(Boolean)
-    .join(' | ');
 }
 
 function buildFallbackSessionSummary(session: Session, project: ProjectSummary): string {
   const firstUser = extractFirstUserMessage(session.conversationDigest);
   const lastAssistant = extractLastAssistantMessage(session.conversationDigest);
   const files = formatFiles(session.filesTouched, project.projectPath).slice(0, 5);
-  const actions = cleanList(session.toolCallSummaries, 4, 80);
+  const tools = extractToolNames(session).slice(0, 4);
 
-  const lines: string[] = [];
-  lines.push(`- I worked on ${session.title ?? `a ${session.tool} session`} in ${project.projectName}.`);
+  const chunks: string[] = [];
+  chunks.push(`In this session I worked on ${session.title ?? `a ${session.tool} task`} in ${project.projectName}.`);
 
   if (firstUser) {
-    lines.push(`- I focused on: ${truncateSentence(firstUser, 160)}.`);
+    chunks.push(`I started by focusing on ${truncateSentence(firstUser, 180)}.`);
+    if (looksLikeChallenge(firstUser)) {
+      chunks.push('A key part of the session was working through that challenge to keep momentum.');
+    }
+  }
+
+  if (tools.length > 0) {
+    chunks.push(`As the work progressed, I relied on ${tools.join(', ')} to move the task forward.`);
   }
 
   if (lastAssistant) {
-    lines.push(`- Outcome: ${truncateSentence(lastAssistant, 160)}.`);
-  } else if (actions.length > 0) {
-    lines.push(`- Main actions included ${actions.join(', ')}.`);
+    chunks.push(`By the end, ${truncateSentence(lastAssistant, 180)}.`);
   }
 
   if (files.length > 0) {
-    lines.push(`- I touched ${files.join(', ')}.`);
+    chunks.push(`The most relevant files were ${files.join(', ')}.`);
   }
 
-  return lines.join('\n');
+  return chunks.join(' ');
+}
+
+function looksLikeChallenge(text: string): boolean {
+  const normalized = text.toLowerCase();
+  return (
+    normalized.includes('issue') ||
+    normalized.includes('error') ||
+    normalized.includes('fail') ||
+    normalized.includes('problem') ||
+    normalized.includes('challenge') ||
+    normalized.includes('debug')
+  );
 }
 
 async function summarizeSessionWithLlm(
@@ -374,7 +372,8 @@ function buildSessionPrompt(
   instructions: string,
 ): string {
   const files = formatFiles(session.filesTouched, project.projectPath).join(', ') || 'None';
-  const actions = cleanList(session.toolCallSummaries, 16, 120).join('\n- ') || 'None';
+  const toolsUsed = extractToolNames(session).join(', ') || 'None';
+  const skillsUsed = extractSkillNames(session).join(', ') || 'None';
   const digest = session.conversationDigest || 'No transcript text available.';
 
   return `${instructions}
@@ -382,13 +381,12 @@ function buildSessionPrompt(
 ## Session Context
 - Project: ${project.projectName}
 - Session title: ${session.title ?? 'Untitled'}
-- Tool: ${session.tool}
+- Agent: ${session.tool}
 - Start: ${session.startedAt.toISOString()}
 - End: ${session.endedAt.toISOString()}
 - Files touched: ${files}
-
-## Tool actions
-- ${actions}
+- Tools used: ${toolsUsed}
+- Skills used: ${skillsUsed}
 
 ## Conversation digest
 ${digest}
@@ -468,17 +466,11 @@ async function callOpenAI(apiKey: string, prompt: string): Promise<string | null
 function normalizeSummary(text: string): string {
   const cleaned = text
     .split('\n')
-    .map((line) => line.trim())
-    .filter(Boolean)
-    .slice(0, 6)
-    .map((line) => {
-      if (line.startsWith('- ')) return line;
-      if (/^\d+\.\s+/.test(line)) return '- ' + line.replace(/^\d+\.\s+/, '');
-      return '- ' + line;
-    })
-    .join('\n');
+    .map((line) => line.trimEnd())
+    .join('\n')
+    .trim();
 
-  return cleaned || '- I completed focused development work in this session.';
+  return cleaned || 'I completed focused development work in this session.';
 }
 
 function formatFiles(files: string[], projectPath: string): string[] {
@@ -492,43 +484,71 @@ function formatFiles(files: string[], projectPath: string): string[] {
   });
 }
 
-function cleanList(items: string[], maxItems: number, maxLen: number): string[] {
-  const seen = new Set<string>();
-  const out: string[] = [];
+function extractToolNames(session: Session): string[] {
+  const names = new Set<string>();
 
-  for (const item of items) {
-    const clean = item.replace(/\s+/g, ' ').trim();
+  for (const summary of session.toolCallSummaries) {
+    const clean = summary.trim();
     if (!clean) continue;
 
-    const shortened = clean.length > maxLen ? clean.slice(0, maxLen - 3) + '...' : clean;
-    if (seen.has(shortened)) continue;
+    let tool = clean;
+    if (tool.startsWith('bash:')) {
+      tool = 'bash';
+    } else if (tool.includes(':')) {
+      tool = tool.split(':')[0];
+    } else {
+      tool = tool.split(/\s+/)[0];
+    }
 
-    seen.add(shortened);
-    out.push(shortened);
-    if (out.length >= maxItems) break;
+    tool = tool.replace(/[^a-zA-Z0-9_.-]/g, '');
+    if (!tool) continue;
+    names.add(tool);
+    if (names.size >= 12) break;
   }
 
-  return out;
+  return [...names];
 }
 
-function extractFollowUps(sessions: Session[]): string[] {
-  const followUps: string[] = [];
+function extractSkillNames(session: Session): string[] {
+  const names = new Set<string>();
+  const text = session.conversationDigest;
+  if (!text) return [];
 
-  for (const session of sessions) {
-    const lastUser = extractLastUserMessage(session.conversationDigest);
-    if (!lastUser) continue;
-    followUps.push(`${session.projectName ?? 'Unknown project'}: ${truncateSentence(lastUser, 150)}`);
+  const dollarPattern = /\$([a-z][a-z0-9-]+)/g;
+  let match: RegExpExecArray | null = null;
+  while ((match = dollarPattern.exec(text)) !== null) {
+    const candidate = match[1].toLowerCase();
+    if (!isIgnoredSkillName(candidate)) names.add(candidate);
   }
 
-  return [...new Set(followUps)].slice(0, 6);
+  const slashPattern = /(?:^|\n)\s*\/([a-z][a-z0-9-]+)/gm;
+  while ((match = slashPattern.exec(text)) !== null) {
+    const candidate = match[1].toLowerCase();
+    if (candidate.length >= 3 && !isIgnoredSkillName(candidate)) names.add(candidate);
+  }
+
+  return [...names].slice(0, 8);
+}
+
+function isIgnoredSkillName(value: string): boolean {
+  const ignored = new Set([
+    'users',
+    'tmp',
+    'var',
+    'src',
+    'github',
+    'com',
+    'home',
+    'local',
+    'workspace',
+    'environment',
+    'codex-thread-id',
+  ]);
+  return ignored.has(value);
 }
 
 function extractFirstUserMessage(digest: string): string | null {
   return extractMessageByRole(digest, 'User', 'first');
-}
-
-function extractLastUserMessage(digest: string): string | null {
-  return extractMessageByRole(digest, 'User', 'last');
 }
 
 function extractLastAssistantMessage(digest: string): string | null {
@@ -558,12 +578,19 @@ function extractMessageByRole(
 function sanitizeTranscriptMessage(text: string): string {
   let out = text;
 
+  out = out.replace(/#\s*AGENTS\.md instructions[\s\S]*?(?=<environment_context>|<\/environment_context>|$)/gi, ' ');
+  out = out.replace(/<INSTRUCTIONS>[\s\S]*?<\/INSTRUCTIONS>/gi, ' ');
+  out = out.replace(/<INSTRUCTIONS>[\s\S]*$/gi, ' ');
+  out = out.replace(/<\/?INSTRUCTIONS>/gi, ' ');
   out = out.replace(/#\s*AGENTS\.md instructions[\s\S]*?(?=\n\n|$)/gi, ' ');
   out = out.replace(/<environment_context>[\s\S]*?<\/environment_context>/gi, ' ');
   out = out.replace(/<instructions>[\s\S]*?<\/instructions>/gi, ' ');
   out = out.replace(/<skill>[\s\S]*?<\/skill>/gi, ' ');
   out = out.replace(/<agent_instructions>[\s\S]*?<\/agent_instructions>/gi, ' ');
   out = out.replace(/##\s*Commit Trailer Policy[\s\S]*?(?=\n##|\n#|$)/gi, ' ');
+  out = out.replace(/Co-authored-by:[^\n]*/gi, ' ');
+  out = out.replace(/Session-ID:[^\n]*/gi, ' ');
+  out = out.replace(/```[\s\S]*?```/g, ' ');
 
   out = out.replace(/\s+/g, ' ').trim();
   return out || '';

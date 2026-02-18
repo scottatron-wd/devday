@@ -68,6 +68,7 @@ function sampleRecap(): DayRecap {
             conversationDigest: [
               '[User]: Please add worklog mode and write an obsidian note.',
               '[Assistant]: I implemented the worklog mode and tests.',
+              '[User]: use $skill-creator for the prompt changes.',
               '[User]: also include session IDs in frontmatter.',
             ].join('\n\n'),
             toolCallSummaries: [
@@ -175,10 +176,13 @@ test('buildWorklogMarkdown renders descriptive summary lines', async () => {
   });
 
   const markdown = buildWorklogMarkdown(recap, summaries.summaries);
-  assert.ok(markdown.includes('## Work Completed'));
-  assert.ok(markdown.includes('Summary:'));
+  assert.ok(markdown.includes('## project-alpha'));
+  assert.ok(markdown.includes('Tools used:'));
+  assert.ok(markdown.includes('Skills used:'));
   assert.ok(markdown.includes('Session ID: `session-1`'));
   assert.ok(markdown.includes('Files touched: src/index.ts, README.md'));
+  assert.ok(!markdown.includes('## Local Context'));
+  assert.ok(!markdown.includes('## Follow-up'));
   assert.ok(!markdown.includes('Cost'));
   assert.ok(!markdown.includes('Tokens'));
 });
@@ -202,6 +206,9 @@ test('buildObsidianInboxEntries creates one entry per session with session_id', 
   assert.ok(entries[1].filePath.startsWith('/vault/inbox/2026-02-17-140000-'));
   assert.ok(entries[0].content.includes('session_id: "session-1"'));
   assert.ok(entries[1].content.includes('session_id: "session-2"'));
+  assert.ok(entries[0].content.includes('agent: "codex"'));
+  assert.ok(entries[0].content.includes('tool: "devday"'));
+  assert.ok(entries[0].content.includes('cwd: "/tmp/project-alpha"'));
 });
 
 test('resolveVaultPath expands home shorthand', () => {

@@ -2,20 +2,22 @@
 
 You are summarizing one coding session from a developer worklog.
 
-## Output format
+## Output style
 
-- Return exactly 2-4 concise bullet points.
-- Start each bullet with `- `.
-- Use first person past tense ("I updated...", "I fixed...", "I investigated...").
+- Write in a conversational first-person style.
+- Prefer 1-3 short paragraphs that describe progression across the session.
+- You may add headings only if they improve clarity.
 
-## Priorities
+## Focus
 
 - Focus on outcomes, decisions, and technical changes.
-- Mention concrete files, systems, or integrations when available.
-- Mention blockers or follow-up only if clearly present.
+- Explain how the session progressed from start to finish.
+- Call out notable challenges, tradeoffs, or discoveries where relevant.
+- Mention concrete files/systems if useful.
 
-## Exclusions
+## Avoid
 
 - Do not mention token usage, cost, or message counts.
 - Do not mention model/provider names.
-- Do not repeat raw transcript text verbatim unless needed.
+- Do not use a rigid template or strict bullet-only output.
+- Do not include long verbatim transcript quotes.
