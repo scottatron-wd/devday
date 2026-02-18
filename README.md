@@ -50,6 +50,9 @@ devday --json                 # machine-readable output
 devday --worklog              # detailed markdown worklog
 devday --worklog --write-obsidian-inbox
 devday --worklog --session-summary-instructions ./prompts/worklog-session-summary.md
+devday --worklog --worklog-full-session-log
+devday --worklog --worklog-digest-max-chars 40000 --worklog-message-max-chars 2000
+devday --worklog --worklog-summary-chunk-chars 10000
 devday --no-git               # skip git integration
 devday --no-summarize         # skip LLM summaries
 devday -v                     # debug output
@@ -88,6 +91,17 @@ You can provide your own prompt file:
 ```bash
 devday --worklog --session-summary-instructions ~/my-prompts/devday-session-summary.md
 ```
+
+Control how much session context is sent to the summarizer:
+
+```bash
+devday --worklog --worklog-digest-max-chars 40000
+devday --worklog --worklog-message-max-chars 2000
+devday --worklog --worklog-full-session-log
+devday --worklog --worklog-summary-chunk-chars 10000
+```
+
+`--worklog-full-session-log` disables digest truncation. For long logs, devday automatically chunks and synthesizes summaries.
 
 The worklog output includes separate tool and skill lists per session.
 

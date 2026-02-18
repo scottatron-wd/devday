@@ -1,6 +1,7 @@
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { dirname, join, relative } from 'node:path';
+import { isDigestTruncated } from './parsers/digest.js';
 import type { DayRecap, DevDayConfig, ProjectSummary, Session } from './types.js';
 
 interface SessionContext {
@@ -21,6 +22,7 @@ interface ObsidianEntryOptions {
 interface SessionSummaryOptions {
   summarizeWithLlm?: boolean;
   instructionsPath?: string;
+  chunkChars?: number;
 }
 
 interface ObsidianEntry {
@@ -39,6 +41,8 @@ interface SessionSummaryResult {
 }
 
 const LLM_TIMEOUT_MS = 25_000;
+const DEFAULT_SUMMARY_CHUNK_CHARS = 7_500;
+const MAX_SUMMARY_CHUNKS = 12;
 
 const DEFAULT_SESSION_SUMMARY_INSTRUCTIONS = `# Devday Session Summary Instructions
 
@@ -52,13 +56,18 @@ You are summarizing one coding session from a developer worklog.
 ## Focus
 - Emphasize outcomes, decisions, and technical changes.
 - Explain how the session progressed from start to finish (early, middle, and late phases).
+- Group related work into coherent phases/workstreams when useful.
+- Prefer completed outcomes over attempted but unfinished actions.
 - Call out noteworthy challenges, tradeoffs, or discoveries where relevant.
 - Mention concrete files/systems if useful.
+- Include concrete identifiers when available (for example commit SHAs, PR numbers, build IDs, refresh IDs).
+- Mention unresolved decisions or risks only when they materially affect next steps.
 
 ## Avoid
 - Token/cost/model/provider details.
 - Forced templates or strict bullet-only output.
 - Long verbatim transcript quotes.
+- Invented identifiers or unsupported claims.
 `;
 
 export async function buildSessionSummaries(
@@ -84,6 +93,7 @@ export async function buildSessionSummaries(
         ctx.session,
         config,
         instructions.text,
+        options,
       );
       if (llmSummary) summary = llmSummary;
     }
@@ -355,45 +365,62 @@ async function summarizeSessionWithLlm(
   session: Session,
   config: DevDayConfig,
   instructions: string,
+  options: SessionSummaryOptions,
 ): Promise<string | null> {
-  const prompt = buildSessionPrompt(project, session, instructions);
+  const digest = session.conversationDigest || 'No transcript text available.';
+  const chunkChars = resolveSummaryChunkChars(options.chunkChars);
+  const prompt = buildSessionPrompt(project, session, instructions, digest);
 
-  if (config.preferredSummarizer === 'anthropic' && config.anthropicApiKey) {
-    return callAnthropic(config.anthropicApiKey, prompt);
+  if (digest.length <= chunkChars) {
+    return callSummarizer(config, prompt);
   }
-  if (config.preferredSummarizer === 'openai' && config.openaiApiKey) {
-    return callOpenAI(config.openaiApiKey, prompt);
+
+  const digestChunks = splitDigestIntoChunks(digest, chunkChars, MAX_SUMMARY_CHUNKS);
+  const chunkSummaries: string[] = [];
+
+  for (let index = 0; index < digestChunks.length; index++) {
+    const chunkPrompt = buildChunkSummaryPrompt(
+      project,
+      session,
+      instructions,
+      digestChunks[index],
+      index + 1,
+      digestChunks.length,
+    );
+    const chunkSummary = await callSummarizer(config, chunkPrompt);
+    if (chunkSummary) chunkSummaries.push(chunkSummary);
   }
-  return null;
+
+  if (chunkSummaries.length === 0) {
+    return callSummarizer(config, prompt);
+  }
+
+  const synthesisPrompt = buildChunkSynthesisPrompt(
+    project,
+    session,
+    instructions,
+    chunkSummaries,
+    digestChunks.length,
+  );
+  const synthesized = await callSummarizer(config, synthesisPrompt);
+  if (synthesized) return synthesized;
+
+  return chunkSummaries.join('\n\n');
 }
 
 function buildSessionPrompt(
   project: ProjectSummary,
   session: Session,
   instructions: string,
+  digest: string,
 ): string {
-  const files = formatFiles(session.filesTouched, project.projectPath).join(', ') || 'None';
-  const toolsUsed = extractToolNames(session).join(', ') || 'None';
-  const skillsUsed = extractSkillNames(session).join(', ') || 'None';
+  const context = buildSessionContextBlock(project, session, digest);
   const toolTimeline = formatToolTimeline(session.toolCallSummaries);
-  const digest = session.conversationDigest || 'No transcript text available.';
-  const nativeSummary = session.summary?.trim() || 'None';
-  const digestTruncated = digest.includes('[...truncated]') ? 'yes' : 'no';
 
   return `${instructions}
 
 ## Session Context
-- Project: ${project.projectName}
-- Session title: ${session.title ?? 'Untitled'}
-- Agent: ${session.tool}
-- Start: ${session.startedAt.toISOString()}
-- End: ${session.endedAt.toISOString()}
-- Message counts: ${session.messageCount} total (${session.userMessageCount} user, ${session.assistantMessageCount} assistant)
-- Native session summary: ${nativeSummary}
-- Transcript truncated: ${digestTruncated}
-- Files touched: ${files}
-- Tools used: ${toolsUsed}
-- Skills used: ${skillsUsed}
+${context}
 
 ## Tool Activity Timeline
 ${toolTimeline}
@@ -401,6 +428,97 @@ ${toolTimeline}
 ## Conversation digest
 ${digest}
 `;
+}
+
+function buildChunkSummaryPrompt(
+  project: ProjectSummary,
+  session: Session,
+  instructions: string,
+  chunk: string,
+  chunkIndex: number,
+  totalChunks: number,
+): string {
+  const context = buildSessionContextBlock(project, session, chunk);
+
+  return `${instructions}
+
+You are summarizing chunk ${chunkIndex} of ${totalChunks} from one long session.
+Focus only on what happened in this chunk and keep it concise.
+
+## Session Context
+${context}
+
+## Digest chunk (${chunkIndex}/${totalChunks})
+${chunk}
+`;
+}
+
+function buildChunkSynthesisPrompt(
+  project: ProjectSummary,
+  session: Session,
+  instructions: string,
+  chunkSummaries: string[],
+  totalChunks: number,
+): string {
+  const digest = session.conversationDigest || 'No transcript text available.';
+  const context = buildSessionContextBlock(project, session, digest);
+
+  const numberedSummaries = chunkSummaries
+    .map((summary, index) => `Chunk ${index + 1}:\n${summary}`)
+    .join('\n\n');
+
+  return `${instructions}
+
+Synthesize these ${totalChunks} chunk summaries into one cohesive session summary.
+Ensure the final writeup covers the overall progression from early work to final outcomes.
+
+## Session Context
+${context}
+
+## Chunk Summaries
+${numberedSummaries}
+`;
+}
+
+function buildSessionContextBlock(
+  project: ProjectSummary,
+  session: Session,
+  digest: string,
+): string {
+  const files = formatFiles(session.filesTouched, project.projectPath).join(', ') || 'None';
+  const toolsUsed = extractToolNames(session).join(', ') || 'None';
+  const skillsUsed = extractSkillNames(session).join(', ') || 'None';
+  const nativeSummary = session.summary?.trim() || 'None';
+  const digestTruncated = isDigestTruncated(digest) ? 'yes' : 'no';
+  const evidenceSignals = extractEvidenceSignals(session);
+
+  return [
+    `- Project: ${project.projectName}`,
+    `- Session title: ${session.title ?? 'Untitled'}`,
+    `- Agent: ${session.tool}`,
+    `- Start: ${session.startedAt.toISOString()}`,
+    `- End: ${session.endedAt.toISOString()}`,
+    `- Message counts: ${session.messageCount} total (${session.userMessageCount} user, ${session.assistantMessageCount} assistant)`,
+    `- Native session summary: ${nativeSummary}`,
+    `- Transcript truncated: ${digestTruncated}`,
+    `- Files touched: ${files}`,
+    `- Tools used: ${toolsUsed}`,
+    `- Skills used: ${skillsUsed}`,
+    `- Evidence signals: ${evidenceSignals}`,
+  ].join('\n');
+}
+
+async function callSummarizer(
+  config: DevDayConfig,
+  prompt: string,
+): Promise<string | null> {
+  if (config.preferredSummarizer === 'anthropic' && config.anthropicApiKey) {
+    return callAnthropic(config.anthropicApiKey, prompt);
+  }
+  if (config.preferredSummarizer === 'openai' && config.openaiApiKey) {
+    return callOpenAI(config.openaiApiKey, prompt);
+  }
+  return null;
 }
 
 async function callAnthropic(apiKey: string, prompt: string): Promise<string | null> {
@@ -481,6 +599,94 @@ function normalizeSummary(text: string): string {
     .trim();
 
   return cleaned || 'We completed focused development work in this session.';
+}
+
+function resolveSummaryChunkChars(input: number | undefined): number {
+  if (typeof input === 'number' && Number.isFinite(input)) {
+    if (input <= 0) return Number.MAX_SAFE_INTEGER;
+    return Math.floor(input);
+  }
+
+  const fromEnv = process.env.DEVDAY_SESSION_SUMMARY_CHUNK_CHARS;
+  if (!fromEnv) return DEFAULT_SUMMARY_CHUNK_CHARS;
+
+  const parsed = Number.parseInt(fromEnv, 10);
+  if (!Number.isFinite(parsed)) return DEFAULT_SUMMARY_CHUNK_CHARS;
+  if (parsed <= 0) return Number.MAX_SAFE_INTEGER;
+  return parsed;
+}
+
+function splitDigestIntoChunks(
+  digest: string,
+  targetChars: number,
+  maxChunks: number,
+): string[] {
+  if (digest.length <= targetChars) return [digest];
+
+  const entries = digest
+    .split(/\n\n(?=\[(?:User|Assistant)\]:)/)
+    .map((entry) => entry.trim())
+    .filter(Boolean);
+  if (entries.length === 0) return [digest];
+
+  const chunks: string[] = [];
+  let current = '';
+
+  for (const entry of entries) {
+    const candidate = current ? `${current}\n\n${entry}` : entry;
+    if (candidate.length > targetChars && current) {
+      chunks.push(current);
+      current = entry;
+      continue;
+    }
+    current = candidate;
+  }
+
+  if (current) chunks.push(current);
+  if (chunks.length <= maxChunks) return chunks;
+
+  return rebalanceChunks(chunks, maxChunks);
+}
+
+function rebalanceChunks(chunks: string[], maxChunks: number): string[] {
+  if (chunks.length <= maxChunks) return chunks;
+
+  const grouped: string[] = [];
+  const groupSize = Math.ceil(chunks.length / maxChunks);
+
+  for (let index = 0; index < chunks.length; index += groupSize) {
+    grouped.push(chunks.slice(index, index + groupSize).join('\n\n'));
+  }
+
+  return grouped;
+}
+
+function extractEvidenceSignals(session: Session): string {
+  const source = `${session.conversationDigest}\n${session.toolCallSummaries.join('\n')}`;
+  const values: string[] = [];
+  const seen = new Set<string>();
+
+  const add = (value: string): void => {
+    const clean = value.trim();
+    if (!clean || seen.has(clean)) return;
+    seen.add(clean);
+    values.push(clean);
+  };
+
+  for (const match of source.matchAll(/\b(?:commit\s+)?([0-9a-f]{7,12})\b/gi)) {
+    add(`commit ${match[1]}`);
+  }
+  for (const match of source.matchAll(/\bPR\s*#\s*(\d+)\b/gi)) {
+    add(`PR #${match[1]}`);
+  }
+  for (const match of source.matchAll(/\bbuild\s*#?\s*(\d+)\b/gi)) {
+    add(`build ${match[1]}`);
+  }
+  for (const match of source.matchAll(/\b[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\b/gi)) {
+    add(`id ${match[0]}`);
+  }
+
+  return values.slice(0, 12).join(', ') || 'None';
 }
 
 function buildSessionHeadingTitle(session: Session): string {

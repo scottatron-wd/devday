@@ -59,6 +59,10 @@ program
   .option('--obsidian-vault <path>', 'Obsidian vault path (default: ~/obsidian-notebook)')
   .option('--worklog-title <title>', 'custom title for generated worklog note')
   .option('--session-summary-instructions <path>', 'markdown prompt file for session summaries (used in --worklog)')
+  .option('--worklog-digest-max-chars <n>', 'max digest chars retained for worklog summaries (0 = no limit)')
+  .option('--worklog-message-max-chars <n>', 'max chars retained per message in worklog digest (0 = no limit)')
+  .option('--worklog-summary-chunk-chars <n>', 'chunk size for summarizing long session digests (0 = no chunking)')
+  .option('--worklog-full-session-log', 'disable digest truncation for worklog summarization')
   .option('--no-git', 'skip git log integration')
   .option('--no-summarize', 'skip LLM summarization')
   .addHelpText('after', `
@@ -72,6 +76,8 @@ Examples:
   $ devday --worklog          detailed work log markdown
   $ devday --worklog --write-obsidian-inbox
   $ devday --worklog --session-summary-instructions ./prompts/worklog-session-summary.md
+  $ devday --worklog --worklog-full-session-log
+  $ devday --worklog --worklog-digest-max-chars 40000 --worklog-message-max-chars 2000
 
 Environment variables:
   OPENAI_API_KEY              enables AI-powered summaries via OpenAI (recommended)
@@ -89,6 +95,7 @@ Supported tools:
     const date = resolveDate(opts.date);
     const config = loadConfig();
     const wantsWorklog = (opts.worklog ?? false) || (opts.writeObsidianInbox ?? false);
+    applyWorklogDigestOptions(opts, wantsWorklog);
 
     // Validate date format
     if (!isValidDateString(date)) {
@@ -206,6 +213,7 @@ Supported tools:
         const sessionSummaries = await buildSessionSummaries(recap, config, {
           summarizeWithLlm: opts.summarize !== false,
           instructionsPath: opts.sessionSummaryInstructions,
+          chunkChars: parseIntegerOption(opts.worklogSummaryChunkChars),
         });
 
         if (sessionSummaries.instructionsPath) {
@@ -292,6 +300,37 @@ Supported tools:
 program.parse();
 
 // ── Helper functions ──────────────────────────────────────────────
+
+function applyWorklogDigestOptions(
+  opts: Record<string, unknown>,
+  wantsWorklog: boolean,
+): void {
+  if (!wantsWorklog) return;
+
+  const fullSessionLog = opts.worklogFullSessionLog === true;
+  if (fullSessionLog) {
+    process.env.DEVDAY_DIGEST_MAX_CHARS = '0';
+    process.env.DEVDAY_DIGEST_MESSAGE_MAX_CHARS = '0';
+    return;
+  }
+
+  const digestMaxChars = parseIntegerOption(opts.worklogDigestMaxChars);
+  const messageMaxChars = parseIntegerOption(opts.worklogMessageMaxChars);
+
+  if (digestMaxChars !== undefined) {
+    process.env.DEVDAY_DIGEST_MAX_CHARS = String(digestMaxChars);
+  }
+  if (messageMaxChars !== undefined) {
+    process.env.DEVDAY_DIGEST_MESSAGE_MAX_CHARS = String(messageMaxChars);
+  }
+}
+
+function parseIntegerOption(value: unknown): number | undefined {
+  if (typeof value !== 'string' || !value.trim()) return undefined;
+  const parsed = Number.parseInt(value, 10);
+  if (!Number.isFinite(parsed)) return undefined;
+  return parsed;
+}
 
 function printBanner(
   config: ReturnType<typeof loadConfig>,
